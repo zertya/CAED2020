@@ -24,12 +24,12 @@ print(__doc__)
 
 #%% prepare for reading data
 #set working director
-os.chdir('D:/school/2e master/case studies/CAED2020')
+os.chdir('D:/school/2e master/case studies/2020CAED')#! be sure to change this to your working directory
 #use precomputed steps
 use_precomputed = True 
 
 #get the data in directory/download if not in the directory 
-data_path = bst_auditory.data_path('D:/school/2e master/case studies/CAED2020/mne_data')
+data_path = bst_auditory.data_path('D:/school/2e master/case studies/mne_data')
 
 
 subject = 'bst_auditory'
@@ -145,7 +145,8 @@ for evoked in (evoked_std, evoked_dev): #lowpass filter of 40Hz to remove power 
 #visual inspection
      pass
 #
-
+evoked_std.plot(window_title='Standard', gfp=True, time_unit='s')
+evoked_dev.plot(window_title='Deviant', gfp=True, time_unit='s')
 #%%artifact detection (normally during RAW stage but to save memory load in epoched)
 """
 ssp_projectors = raw.info['projs']
