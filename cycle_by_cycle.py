@@ -19,6 +19,13 @@ from mne import combine_evoked
 from mne.minimum_norm import apply_inverse
 from mne.datasets.brainstorm import bst_auditory
 from mne.io import read_raw_ctf
+import matplotlib.pyplot as plt
+from bycycle.filt import lowpass_filter, bandpass_filter
+from bycycle.cyclepoints import _fzerorise, _fzerofall, find_extrema, find_zerox
+from bycycle.features import compute_features
+from bycycle.burst import plot_burst_detect_params
+
+
 
 print(__doc__)
 
@@ -96,7 +103,7 @@ else:
 raw.add_proj(projs_saccade)
 raw.add_proj(projs_eog)
 del saccade_epochs, saccades_events, projs_eog, projs_saccade  # To save memory
-raw.plot()
+#raw.plot()
 #%%epoching & averaging
 
 #add events
@@ -118,7 +125,7 @@ del sound_data, diffs
 #remove noisy channels
 raw.info['bads']= ['MLO52-4408','MRT51-4408','MLO42-4408','MLO43-4408']
 ##visual inspection of bad channels, mark as bad by clicking 
-raw.plot(events, event_color = {1: 'b', 2: 'r'})
+#raw.plot(events, event_color = {1: 'b', 2: 'r'})
 
 #epoch
 tmin,tmax = -0.1, 0.5 #start & end of time window used to reject epoch 
@@ -134,19 +141,168 @@ epochs_standard.resample(600, npad='auto')
 epochs_deviant = epochs['deviant'].load_data()
 epochs_deviant.resample(600, npad='auto')
 del epochs
-
 evoked_std = epochs_standard.average()
 evoked_dev = epochs_deviant.average()
-del epochs_standard, epochs_deviant
 
+#epochs_deviant.plot_psd_topomap(ch_type='mag', normalize=True)
 #%%preprocessing (normally during RAW stage but to save memory load in evoked stage)
-for evoked in (evoked_std, evoked_dev): #lowpass filter of 40Hz to remove power line artifacts
+for evoked in (evoked_std, evoked_dev): #lowpass filter of 30Hz to remove power line artifacts
      evoked.filter(l_freq=None, h_freq=40., fir_design='firwin')
 #visual inspection
      pass
 #
-evoked_std.plot(window_title='Standard', gfp=True, time_unit='s')
-evoked_dev.plot(window_title='Deviant', gfp=True, time_unit='s')
+#evoked_std.plot(window_title='Standard', gfp=True, time_unit='s')
+#evoked_dev.plot(window_title='Deviant', gfp=True, time_unit='s')
+
+
+#pick channels
+Fc = [ 'MZF01-4408',
+           'MZF02-4408',
+           'MZF03-4408']
+Fl = ['MLF11-4408',
+         'MLF12-4408',
+         'MLF13-4408',
+         'MLF14-4408',
+         'MLF21-4408',
+         'MLF22-4408',
+         'MLF23-4408',
+         'MLF24-4408',
+         'MLF25-4408',
+         'MLF31-4408',
+         'MLF32-4408',
+         'MLF33-4408',
+         'MLF34-4408',
+         'MLF35-4408',
+         'MLF41-4408',
+         'MLF42-4408',
+         'MLF43-4408',
+         'MLF44-4408',
+         'MLF45-4408',
+         'MLF46-4408',
+         'MLF51-4408',
+         'MLF52-4408',
+         'MLF53-4408',
+         'MLF54-4408',
+         'MLF55-4408',
+         'MLF56-4408',
+         'MLF61-4408',
+         'MLF62-4408',
+         'MLF63-4408',
+         'MLF64-4408',
+         'MLF65-4408',
+         'MLF66-4408',
+         'MLF67-4408'] 
+Fr= [ 'MRF11-4408',
+         'MRF12-4408',
+         'MRF13-4408',
+         'MRF14-4408',
+         'MRF21-4408',
+         'MRF22-4408',
+         'MRF23-4408',
+         'MRF24-4408',
+         'MRF25-4408',
+         'MRF31-4408',
+         'MRF32-4408',
+         'MRF33-4408',
+         'MRF34-4408',
+         'MRF35-4408',
+         'MRF41-4408',
+         'MRF42-4408',
+         'MRF43-4408',
+         'MRF44-4408',
+         'MRF45-4408',
+         'MRF46-4408',
+         'MRF51-4408',
+         'MRF52-4408',
+         'MRF53-4408',
+         'MRF54-4408',
+         'MRF55-4408',
+         'MRF56-4408',
+         'MRF61-4408',
+         'MRF62-4408',
+         'MRF63-4408',
+         'MRF64-4408',
+         'MRF65-4408',
+         'MRF66-4408',
+         'MRF67-4408',]
+#%%start by cycle analysis
+#preprocessing 
+
+signal_deviant =epochs_deviant.get_data(picks = 'MZF01-4408')#convert to numpy array 
+signal_deviant = signal_deviant[:,0,:]
+signal_deviant = np.ravel(signal_deviant)
+Fs = 600
+f_beta = (12.5, 30)
+f_lowpass = 40
+N_seconds = .1
+
+#lowpass 
+signal_deviant_low = lowpass_filter(signal_deviant, Fs, f_lowpass,
+                            N_seconds=N_seconds, remove_edge_artifacts=False)
+
+# Plot signal
+t = np.arange(0, len(signal_deviant)/Fs, 1/Fs)
+tlim = (2, 5)
+tidx = np.logical_and(t>=tlim[0], t<tlim[1])
+
+plt.figure(figsize=(12, 2))
+plt.plot(t[tidx], signal_deviant[tidx], '.5')
+plt.plot(t[tidx], signal_deviant_low[tidx], 'k')
+plt.xlim(tlim)
+plt.tight_layout()
+plt.show()
+#localize peaks and troughs 
+
+N_seconds_beta = .75
+
+Ps, Ts = find_extrema(signal_deviant_low, Fs, f_beta,
+                      filter_kwargs={'N_seconds':N_seconds_beta})
+
+tlim = (12, 15)
+tidx = np.logical_and(t>=tlim[0], t<tlim[1])
+tidxPs = Ps[np.logical_and(Ps>tlim[0]*Fs, Ps<tlim[1]*Fs)]
+tidxTs = Ts[np.logical_and(Ts>tlim[0]*Fs, Ts<tlim[1]*Fs)]
+
+plt.figure(figsize=(12, 2))
+plt.plot(t[tidx], signal_deviant_low[tidx], 'k')
+plt.plot(t[tidxPs], signal_deviant_low[tidxPs], 'b.', ms=10)
+plt.plot(t[tidxTs], signal_deviant_low[tidxTs], 'r.', ms=10)
+plt.xlim(tlim)
+plt.tight_layout()
+plt.show()
+
+#mid point of rise & decay flanks
+zeroxR, zeroxD = find_zerox(signal_deviant_low, Ps, Ts)
+tlim = (13, 14)
+tidx = np.logical_and(t>=tlim[0], t<tlim[1])
+tidxPs = Ps[np.logical_and(Ps>tlim[0]*Fs, Ps<tlim[1]*Fs)]
+tidxTs = Ts[np.logical_and(Ts>tlim[0]*Fs, Ts<tlim[1]*Fs)]
+tidxDs = zeroxD[np.logical_and(zeroxD>tlim[0]*Fs, zeroxD<tlim[1]*Fs)]
+tidxRs = zeroxR[np.logical_and(zeroxR>tlim[0]*Fs, zeroxR<tlim[1]*Fs)]
+
+plt.figure(figsize=(12, 2))
+plt.plot(t[tidx], signal_deviant_low[tidx], 'k')
+plt.plot(t[tidxPs], signal_deviant_low[tidxPs], 'b.', ms=10)
+plt.plot(t[tidxTs], signal_deviant_low[tidxTs], 'r.', ms=10)
+plt.plot(t[tidxDs], signal_deviant_low[tidxDs], 'm.', ms=10)
+plt.plot(t[tidxRs], signal_deviant_low[tidxRs], 'g.', ms=10)
+plt.xlim(tlim)
+plt.xlabel('Time (seconds)')
+plt.tight_layout()
+plt.show()
+#%%cycle feature computation
+burst_kwargs = {'amplitude_fraction_threshold': 0.3,
+                'amplitude_consistency_threshold': .4,
+                'period_consistency_threshold': .5,
+                'monotonicity_threshold': .8,
+                'N_cycles_min': 3}
+
+df = compute_features(signal_deviant_low, Fs, f_beta, burst_detection_kwargs=burst_kwargs)
+plot_burst_detect_params(signal_deviant_low, Fs, df, burst_kwargs,
+                         tlims= (0,10), figsize=(12, 3), plot_only_result= True)
+
+#%%compute amplitude and phase: hilbert transform
+
 #%%artifact detection (normally during RAW stage but to save memory load in epoched)
 """
 ssp_projectors = raw.info['projs']
